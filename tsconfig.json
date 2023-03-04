@@ -1,0 +1,35 @@
+{
+    "extends": "@tsconfig/node18-strictest/tsconfig.json",
+    "compilerOptions": {
+        "module": "Node16",
+        "moduleResolution": "Node16",
+        /* Whenever incremental compilation is enabled */
+        "incremental": true,
+        /* File containing saved information about incremental compilation */
+        "tsBuildInfoFile": "cache/tsc.json",
+        /* Whenever sourcemaps should be made for emitted JavaScript files */
+        "sourceMap": true,
+        /* Directrory in which are placed all emitted files */
+        "outDir": "dist",
+        /* Whenever comments are emitted to files */
+        "removeComments": true,
+        /* Replace a set of core libraries. */
+        "lib": ["ES2022", "DOM.Iterable"],
+        /* Limit module resolution to project's path only */
+        "typeRoots": ["./node_modules/@types"],
+        /* Use `tslib` for import helpers. */
+        "importHelpers": true,
+        /* Allow for JSON imports */
+        "resolveJsonModule": true,
+        /* Enforce consistent casing for imported module names */
+        "forceConsistentCasingInFileNames": true,
+        /* Use *nix end-of-line character for emitted files */
+        "newLine": "lf",
+        "noUnusedLocals": false,
+        /* Do not emit anything when there's an error in source files */
+        "noEmitOnError": true
+    },
+    "files":[
+        "src/index.ts"
+    ]
+}
