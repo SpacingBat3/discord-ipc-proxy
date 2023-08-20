@@ -10,9 +10,13 @@ type NumericFnArgs<T extends NumericFn> = (
   Parameters<T> extends [Parameters<T>[0], ...infer R extends unknown[]] ? R : [Parameters<T>[0]]
 );
 
+type BinaryEncoding = "hex"|"base64";
+
 type domain = "com"|"org"|"net"|"int"|"edu"|"gov"|"mil"|"local"|"lan"|"example"|
   "invalid"|"onion"|"test"|"pl"|"eu"|"us"|"gb"|"app"|"new"|"dev"|"news"|"io"|"lol"|
   "live"|"jobs"|"inc"|"hosting"|"help"|"here"|"fun"|"bot"|"lgbt"
+
+type uuid = `${string}-${string}-${string}-${string}-${string}`
 
 const enum Protocol {
   IPC = "ipc",
@@ -52,14 +56,14 @@ interface IPCListenMsg extends EvtMsg {
 
 interface ReqMsg extends EvtMsg {
   evt: "message",
-  id: number,
+  id: uuid,
   body: string|object,
   bodyType: string
 }
 
 interface BinMsg extends ReqMsg {
   body : string,
-  bodyType: "binary"
+  bodyType: `binary:${BinaryEncoding}`
 }
 
 interface StrMsg extends ReqMsg {
@@ -120,7 +124,7 @@ function getServer<T extends URI<Protocol>>(address: T):getServerReturnType<T> {
   })();
   const port = isNaN(parseInt(url.port)) ? url.protocol.endsWith("s:") && url.protocol !== "ws:" ? 443 : 80 : parseInt(url.port);
   switch(url.protocol as `${Protocol}:`) {
-    case "ws:": {
+    case "ws:": case "wss:": {
       const server = new WebSocketServer({host: url.host.split(":")[0], port, clientTracking: true});
       return server as getServerReturnType<T>;
     }
@@ -149,7 +153,7 @@ const server = {
 }
 
 /** Prints a JSON message about request which came through socket */
-function dumpReqMsg(transport:Protocol,receiver:EvtMsg["receiver"],body:ReqMsg["body"]|Buffer|ArrayBuffer,id:number) {
+function dumpReqMsg(transport:Protocol,receiver:EvtMsg["receiver"],body:ReqMsg["body"]|Buffer,id:uuid,optInfo:object={}) {
   console.log(JSON.stringify({
     evt: "message",
     transport,
@@ -158,19 +162,20 @@ function dumpReqMsg(transport:Protocol,receiver:EvtMsg["receiver"],body:ReqMsg["
     ...(typeof body === "string" ? {
       body,
       bodyType: "string",
-    } : body.constructor === Object ? {
-      body: body as object,
-      bodyType: "json"
+    } : body instanceof Buffer ? {
+      body: body.toString("base64"),
+      bodyType: "binary:base64"
     } : {
-      body: body.toString("hex"),
-      bodyType: "binary"
+      body: body,
+      bodyType: "json"
     }),
+    ...optInfo,
     timestamp: process.hrtime()
   } satisfies JSONMsg|StrMsg|BinMsg));
 }
 
 /** Prints a JSON message to STDOUT indicating that specific event has came through the transport. */
-function dumpEvtMsg<T extends Exclude<EvtMsg["evt"],"message">>(transport:Protocol,receiver:EvtMsg["receiver"],evt:T, portOrId: number) {
+function dumpEvtMsg<T extends Exclude<EvtMsg["evt"],"message">>(transport:Protocol,receiver:EvtMsg["receiver"],evt:T, portOrId: number|uuid) {
   console.log(JSON.stringify({
     evt,
     transport,
@@ -180,8 +185,11 @@ function dumpEvtMsg<T extends Exclude<EvtMsg["evt"],"message">>(transport:Protoc
   } satisfies WSListenMsg|IPCListenMsg|EvtMsg|ConMsg))
 }
 
-const idPool=Object.freeze([new Map<number,undefined>(), new Map<number,undefined>()] as const);
-
+/**
+ * Checks if given message can be UTF-8 encoded. This heavily relies on
+ * `Buffer.prototype.toString()` and counting `0xfffd` values after/before
+ * conversion.
+ */
 function isValidUTF8(raw:RawData) {
   /** An instance of Buffer built from raw data. */
   const buffer = Array.isArray(raw) ? Buffer.concat(raw) : raw instanceof Buffer ? raw : Buffer.from(raw);
@@ -195,50 +203,100 @@ function isValidUTF8(raw:RawData) {
     .length;
   return pre === post;
 }
+function parseData(protocol:Protocol.IPC,receiver:EvtMsg["receiver"],id:uuid,data:Buffer,isBinary?:boolean):void
+function parseData(protocol:Protocol.WS|Protocol.WSS,receiver:EvtMsg["receiver"],id:uuid,data:RawData,isBinary?:boolean):string|ArrayBuffer
+function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:uuid,data:Buffer|RawData,isBinary?:boolean):void|string|ArrayBuffer|never {
+  switch(protocol){
+    case Protocol.IPC: {
+      if(!(data instanceof Buffer))
+        throw TypeError("'data' is not a Buffer");
+      let offset = 0;
+      const dataPairs:[string,object|string|Buffer][]=[];
+      while(offset < data.length) {
+        const prefix = data.subarray(offset,offset+=8);
+        const dataSize = prefix.readUInt16LE(4);
+        const bodyRaw = data.subarray(offset,offset+=dataSize);
+        let body:string|object|Buffer;
+        if(isValidUTF8(bodyRaw)) {
+          body = bodyRaw.toString();
+          if(isJSON(body))
+            body = JSON.parse(body);
+        } else {
+          body = bodyRaw;
+        }
+        dataPairs.push([prefix.toString("hex"),body]);
+      }
+      dataPairs.forEach(pair => {
+        dumpReqMsg(protocol,receiver,pair[1],id,{bodyPrefix:pair[0]});
+      })
+      break;
+    }
+    default:
+      const parsedData = (isBinary??!isValidUTF8(data)) ? (
+        Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data)
+        ) : (
+          Array.isArray(data) ? data.every(buf => buf instanceof Buffer) ? Buffer.concat(data) : data as unknown[] : Buffer.from(data)
+        ).toString();
 
-function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:number,data:RawData,isBinary?:boolean) {
-  const parsedData = (isBinary??!isValidUTF8(data)) ? (
-    Array.isArray(data) ? Buffer.concat(data) : data
-    ) : (
-      Array.isArray(data) ? data.every(buf => buf instanceof Buffer) ? Buffer.concat(data) : data as unknown[] : data
-    ).toString();
+      if(typeof parsedData === "string" && isJSON(parsedData))
+        dumpReqMsg(protocol,receiver,JSON.parse(parsedData),id);
+      else
+        dumpReqMsg(protocol,receiver,parsedData,id);
 
-  if(parsedData instanceof ArrayBuffer)
-    dumpReqMsg(protocol,receiver,parsedData.toString(),id);
-  else if(isJSON(parsedData))
-    dumpReqMsg(protocol,receiver,JSON.parse(parsedData),id);
-  else
-    dumpReqMsg(protocol,receiver,parsedData,id);
-
-  return parsedData;
+      return parsedData;
+  }
 }
+
+// IPC message ID store (to avoid loops)
+const msgStore = new Set<string>();
+
+// Source map support
+(process as {setSourceMapsEnabled?: (stat:boolean)=>void})?.setSourceMapsEnabled?.(true)
 
 // WebSocket
 server.ws.then(([port,server]) => {
   const sigintMsg = JSON.stringify({signal:"SIGINT",transport:Protocol.WS});
   process.once("SIGINT",() => {server.close(); console.log("\r\r"+sigintMsg)});
-  dumpEvtMsg(Protocol.WS,"both","listening",port);
   server.on("connection", async(ws,req) => {
+    const id = crypto.randomUUID();
     /** A connection to Discord's WebSocket server. */
-    const con = await tryUntil((port) => new Promise<WebSocket>((ok,error)=>{
-      const client = new WebSocket(new URL(req.url??"/?v=1",`ws://127.0.0.1:${port}`), {
-        origin: req.headers["origin"]
-      });
-      const errorListener = (cause:Error) => error(cause);
-      client.once("open", () => {
-        ok(client);
-        client.removeListener("error",errorListener)
-      });
-      client.once("error",errorListener);
-    }),port+1,6472);
-    const id = (()=>{
-      let id = 1;
-      while(idPool[0].has(id))
-        id++;
-      idPool[0].set(id,undefined);
-      return id;
-    })();
+    const con = await (async () => { try {
+      return await tryUntil((port) => new Promise<WebSocket>((ok,error)=>{
+        const client = new WebSocket(new URL(req.url??"/?v=1",`ws://127.0.0.1:${port}`), {
+          origin: req.headers["origin"]
+        });
+        const errorListener = (cause:Error) => error(cause);
+        client.once("open", () => {
+          ok(client);
+          client.removeListener("error",errorListener)
+        });
+        client.once("error",errorListener);
+      }),port+1,6472);
+    } catch(error) {
+      console.error(error);
+      return null;
+    }})()
     // Pipe: Discord->client->server
+    ws.on("message", (data,isBinary) => {
+      const parsed = parseData(Protocol.WS,"server",id,data,isBinary);
+      if(con === null)
+        return;
+      if(con.readyState === con.OPEN)
+        con.send(parsed);
+      else
+        con.once("open", () => con.send(parsed));
+    });
+    ws.on("pong", (data) => con?.ping(data));
+    ws.on("close",(code,reason) => {
+      if(con) try {
+        con.close(Number(code),reason);
+      } catch {
+        con.close();
+      }
+      dumpEvtMsg(Protocol.WS,"server","close",id);
+    });
+    if(con === null)
+      return;
     con.on("message", (data, isBinary) => {
       const parsed = parseData(Protocol.WS,"client",id,data,isBinary);
       if(ws.readyState === ws.OPEN)
@@ -254,66 +312,51 @@ server.ws.then(([port,server]) => {
         con.close();
       }
       dumpEvtMsg(Protocol.WS,"client","close",id);
-      idPool[0].delete(id);
-    });
-    ws.on("message", (data,isBinary) => {
-      const parsed = parseData(Protocol.WS,"server",id,data,isBinary);
-      if(con.readyState === con.OPEN)
-        con.send(parsed);
-      else
-        con.once("open", () => con.send(parsed));
-    });
-    ws.on("pong", (data) => con.ping(data));
-    ws.on("close",(code,reason) => {
-      try {
-        con.close(Number(code),reason);
-      } catch {
-        con.close();
-      }
-      dumpEvtMsg(Protocol.WS,"server","close",id);
-      idPool[0].delete(id);
     });
     dumpEvtMsg(Protocol.WS,"both","connection",id);
   });
+  dumpEvtMsg(Protocol.WS,"both","listening",port);
 });
+
 // IPC
 server.ipc.then(([socketId,server]) => {
   const sigintMsg = JSON.stringify({signal:"SIGINT",transport:Protocol.IPC});
   process.once("SIGINT",() => {server.close(); console.log("\r\r"+sigintMsg)});
-  dumpEvtMsg(Protocol.IPC,"both","listening",socketId);
   server.on("connection", async(ipc) => {
     /** Connection ID. */
-    const id = (()=>{
-      let id = 1;
-      while(idPool[1].has(id))
-        id++;
-      idPool[1].set(id,undefined);
-      return id;
-    })();
-    const con = await tryUntil((id) => new Promise<Socket>((ok,error) => {
-      const client = createConnection({path: resolve(socketPath,`discord-ipc-${id}`)});
-      client.once("connect", () => ok(client));
-      client.once("error", (cause) => error(cause));
-    }),socketId+1,9);
+    const id = crypto.randomUUID();
+    const con = await (async () => { try {
+      return await tryUntil((id) => new Promise<Socket>((ok,error) => {
+        const client = createConnection({path: resolve(socketPath,`discord-ipc-${id}`)});
+        client.once("connect", () => ok(client));
+        client.once("error", (cause) => error(cause));
+      }),socketId+1,9);
+    } catch(error) {
+      console.error(error);
+      return null;
+    }})();
     dumpEvtMsg(Protocol.IPC,"both","connection",id);
     ipc.on("data", (data) => {
-      const parsed = parseData(Protocol.IPC,"server",id,data);
+      parseData(Protocol.IPC,"server",id,data);
+      if(con === null)
+        return;
       if(con.connecting)
-        con.once("connect", () => con.push(parsed))
+        con.once("connect", () => con.write(data))
       else
-        con.push(parsed);
+        con.write(data);
     })
-    ipc.on("end", () => con.end());
+    ipc.on("end", () => con?.end());
     ipc.on("close", () => {
       dumpEvtMsg(Protocol.IPC,"server","close",id);
-      con.destroy();
+      con?.destroy();
     });
+    if(con === null)
+      return;
     con.on("data", (data) => {
-      const parsed = parseData(Protocol.IPC,"client",id,data);
       if(ipc.connecting)
-        ipc.once("connect", () => con.push(parsed))
+        ipc.once("connect", () => ipc.write(data))
       else
-        ipc.push(parsed);
+        ipc.write(data);
     });
     con.on("end", () => ipc.end());
     con.on("close", () => {
@@ -321,4 +364,5 @@ server.ipc.then(([socketId,server]) => {
       ipc.destroy();
     })
   });
+  dumpEvtMsg(Protocol.IPC,"both","listening",socketId);
 })
