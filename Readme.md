@@ -1,13 +1,13 @@
 # discord-ipc-proxy
 
 A tool to analyze the Discord's IPC/WebSocket communication between server and
-client.
+client. Acts as a middleware between an application (browser, game).
 
 ## Status
 
-Currenly this tool is a bit experimental. Some things like crashes when proxy
+Currently this tool is a bit experimental. Some things like crashes when proxy
 couldn't find the socket or port of Discord server might occur and even Discord
-on its own might crash it uppon first launch. Those cases might be properly
+on its own might crash it upon first launch. Those cases might be properly
 handled in the future.
 
 Additionally, IPC proxying has not yet been tested, so it is unknown whenever
@@ -18,14 +18,12 @@ it actually works or not. WebSocket proxying should be fully functional.
 1. Clone this repo.
 2. `npm i` to fetch all needed dependencies.
 3. `npm start` to launch proxy.
-4. Start Discord. Proxy may crash as Discord will try to communicate with it
-   over IPC, but there won't be any server available to proxy.
-5. `npm start` again. Everything should be working from now on, as long as
-   Discord IPC/WS server is functional.
+4. Launch Discord. It shouldn't be launched **before** launching proxy.
 
 The proxy will periodically output to its STDOUT a JSON-formatted messages about
 the communication between Discord IPC/WS servers and applications connecting to
-them.
+them. This can be used by 3rd-party software to visualize it in more
+human-readable way (GUI, colorized CLI).
 
 ## About
 
@@ -45,7 +43,7 @@ sequenceDiagram
   critical setup server
     B->>OS: Initialize server, reserve port/path.
   option all in use or taken
-    B--XB: Throw error, cleanup
+    B--XB: Throw error, clean-up
     B--XOS: End process life
   end
   activate S;
@@ -54,8 +52,8 @@ sequenceDiagram
   activate C;
   critical setup client
     B->S: (Open connection, reuse params/origin)
-  option server unavaliable
-    B--XB: Throw error, cleanup
+  option server unavailable
+    B->B: "Null proxying" (receives messages but doesn't proxy them)
     B--XOS: End process life
   option closure by Discord
     S->>B: Close with "n" code
