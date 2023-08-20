@@ -1,7 +1,7 @@
 # discord-ipc-proxy
 
 A tool to analyze the Discord's IPC/WebSocket communication between server and
-client. Acts as a middleware between an application (browser, game).
+client. Acts as a middleware between an application (browser, game) and Discord.
 
 ## Usage
 
