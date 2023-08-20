@@ -3,16 +3,6 @@
 A tool to analyze the Discord's IPC/WebSocket communication between server and
 client. Acts as a middleware between an application (browser, game).
 
-## Status
-
-Currently this tool is a bit experimental. Some things like crashes when proxy
-couldn't find the socket or port of Discord server might occur and even Discord
-on its own might crash it upon first launch. Those cases might be properly
-handled in the future.
-
-Additionally, IPC proxying has not yet been tested, so it is unknown whenever
-it actually works or not. WebSocket proxying should be fully functional.
-
 ## Usage
 
 1. Clone this repo.
