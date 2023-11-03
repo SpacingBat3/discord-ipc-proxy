@@ -214,7 +214,7 @@ function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:uuid,data:Bu
       const dataPairs:[string,object|string|Buffer][]=[];
       while(offset < data.length) {
         const prefix = data.subarray(offset,offset+=8);
-        const dataSize = prefix.readUInt16LE(4);
+        const dataSize = prefix.readUInt32LE(4);
         const bodyRaw = data.subarray(offset,offset+=dataSize);
         let body:string|object|Buffer;
         if(isValidUTF8(bodyRaw)) {
