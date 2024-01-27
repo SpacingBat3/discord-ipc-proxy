@@ -1,4 +1,6 @@
-tsconfig.json
+*config.js*
 .*
 src/
 cache/
+bin/
+dist/bundle.js

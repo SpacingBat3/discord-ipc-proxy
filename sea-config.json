@@ -1,0 +1,6 @@
+{
+  "main": "dist/bundle.js",
+  "output": "cache/sea.blob",
+  "disableExperimentalSEAWarning": true,
+  "useCodeCache": true
+}
