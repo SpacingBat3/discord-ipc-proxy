@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { createServer, createConnection, type Server as IPCServer, type Socket } from "node:net";
-import { WebSocketServer, WebSocket, type Server as WSServer, RawData } from "ws";
+import { WebSocketServer, WebSocket, RawData } from "ws";
+
+type WSServer = WebSocketServer;
 
 type GenericReturnType<V extends unknown[],T extends (...args:V)=>unknown> = T extends (...args:V)=>infer R ? R : never;
 

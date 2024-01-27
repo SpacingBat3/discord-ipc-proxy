@@ -2,6 +2,7 @@
   "name": "discord-ipc-proxy",
   "version": "1.0.0-rc1",
   "description": "A tool to analyze communication within Discord's IPC / WebSocket.",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "start": "tsc && node dist/index.js"
