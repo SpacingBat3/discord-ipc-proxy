@@ -5,9 +5,12 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "start": "tsc && node dist/index.js"
+    "start": "tsc && node .",
+    "build": "tsc"
   },
-  "bin": {},
+  "bin": {
+    "discord-ipc-proxy": "dist/index.js"
+  },
   "keywords": [
     "discord",
     "ipc",
