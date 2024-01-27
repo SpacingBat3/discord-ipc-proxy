@@ -2,3 +2,5 @@ cache/
 dist/
 bin/
 node_modules/
+*.[mc]js
+*.js

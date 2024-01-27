@@ -15,8 +15,6 @@
         "removeComments": true,
         /* Limit module resolution to project's path only */
         "typeRoots": ["./node_modules/@types"],
-        /* Use `tslib` for import helpers. */
-        "importHelpers": true,
         /* Allow for JSON imports */
         "resolveJsonModule": true,
         /* Enforce consistent casing for imported module names */
@@ -28,6 +26,7 @@
         "noEmitOnError": true
     },
     "files":[
-        "src/index.ts"
+        "src/index.ts",
+        "rollup.config.mts"
     ]
 }
