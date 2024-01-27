@@ -12,88 +12,76 @@ type NumericFnArgs<T extends NumericFn> = (
 
 type BinaryEncoding = "hex"|"base64";
 
-type domain = "com"|"org"|"net"|"int"|"edu"|"gov"|"mil"|"local"|"lan"|"example"|
-  "invalid"|"onion"|"test"|"pl"|"eu"|"us"|"gb"|"app"|"new"|"dev"|"news"|"io"|"lol"|
-  "live"|"jobs"|"inc"|"hosting"|"help"|"here"|"fun"|"bot"|"lgbt"
+type uuid = `${string}-${string}-${string}-${string}-${string}`;
 
-type uuid = `${string}-${string}-${string}-${string}-${string}`
-
-const enum Protocol {
-  IPC = "ipc",
-  WS = "ws",
-  WSS = "wss"
-}
-
-interface Host {
-  IPv4: `${number}.${number}.${number}.${number}`,
-  IPv6: `${string}:${string}`|`::${string}`,
-  Name: `${string}.${domain}`
-}
+const enum Protocol { IPC = "ipc", WS = "ws", WSS = "wss" }
 
 interface EvtMsg {
-  evt: "connection"|"ping-pong"|"close"|"open"|"message"|"listening",
-  transport: Protocol,
-  receiver: "client"|"server"|"both",
-  timestamp: readonly [number,number],
+  evt: "connection"|"ping-pong"|"close"|"open"|"message"|"listening";
+  transport: Protocol;
+  receiver: "client"|"server"|"both";
+  timestamp: readonly [number,number];
 }
 
 interface ConMsg extends EvtMsg {
-  evt: "connection",
-  id: number
+  evt: "connection";
+  id: number;
 }
 
 interface WSListenMsg extends EvtMsg {
-  transport: Protocol.WS|Protocol.WSS,
-  evt: "listening",
-  port: number
+  transport: Protocol.WS|Protocol.WSS;
+  evt: "listening";
+  port: number;
 }
 
 interface IPCListenMsg extends EvtMsg {
-  transport: Protocol.IPC,
-  evt: "listening",
-  socketId: number
+  transport: Protocol.IPC;
+  evt: "listening";
+  socketId: number;
 }
 
 interface ReqMsg extends EvtMsg {
-  evt: "message",
-  id: uuid,
-  body: string|object,
-  bodyType: string
+  evt: "message";
+  id: uuid;
+  body: string|object;
+  bodyType: string;
 }
 
 interface BinMsg extends ReqMsg {
-  body : string,
-  bodyType: `binary:${BinaryEncoding}`
+  body : string;
+  bodyType: `binary:${BinaryEncoding}`;
 }
 
 interface StrMsg extends ReqMsg {
-  body: string,
-  bodyType: "string"|"text"
+  body: string;
+  bodyType: "string"|"text";
 }
 
 interface JSONMsg extends ReqMsg {
-  body: object,
-  bodyType: "json"
+  body: object;
+  bodyType: "json";
 }
 
-type URI<T extends Protocol> = T extends Protocol.WS ? (
-  `${T}://${Host["IPv4"]|Host["IPv6"]|Host["Name"]}:${number}`
-) : `${T}://${string}`;
+interface ServerParamCommon {
+  kind: Protocol;
+}
+
+interface ServerParamIPC extends ServerParamCommon {
+  kind: Protocol.IPC;
+  path: string;
+}
+
+interface ServerParamWS extends ServerParamCommon {
+  kind: Protocol.WS | Protocol.WSS;
+  host: string,
+  port: number
+}
 
 const uid = process.getuid?.()??process.env["UID"]??1000;
 
 const socketPath = process.platform === "win32" ? "\\\\pipe\\?" : process.env["XDG_RUNTIME_DIR"] ?? (
   existsSync(`/run/user/${uid}`) ? `/run/user/${uid}` : '/tmp/'
 );
-
-function isJSON(text:string) {
-  try{
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function tryUntil<T extends NumericFn,V extends NumericFnArgs<T>,R extends GenericReturnType<[number,...V],T>>(fn:T,current:number,limit:number,...args:V): Promise<Awaited<R>> {
   try {
@@ -112,40 +100,29 @@ async function tryUntil<T extends NumericFn,V extends NumericFnArgs<T>,R extends
   }
 }
 
-type getServerReturnType<T extends URI<Protocol>> = T extends URI<Protocol.IPC> ? IPCServer : WSServer;
-
-function getServer<T extends URI<Protocol>>(address: T):getServerReturnType<T> {
-  const url = (() =>{
-    try {
-      return new URL(address);
-    } catch {
-      throw new URIError("Unable to parse 'address' to 'URL' class.");
-    }
-  })();
-  const port = isNaN(parseInt(url.port)) ? url.protocol.endsWith("s:") && url.protocol !== "ws:" ? 443 : 80 : parseInt(url.port);
-  switch(url.protocol as `${Protocol}:`) {
-    case "ws:": case "wss:": {
-      const server = new WebSocketServer({host: url.host.split(":")[0], port, clientTracking: true});
-      return server as getServerReturnType<T>;
-    }
-    case "ipc:": {
-      const server = createServer();
-      server.listen(url.pathname);
-      return server as getServerReturnType<T>;
+function getServer(param: ServerParamWS):WSServer;
+function getServer(param: ServerParamIPC):IPCServer;
+function getServer(param: ServerParamIPC|ServerParamWS):IPCServer|WSServer {
+  switch(param.kind) {
+    case Protocol.IPC:
+      return createServer().listen(param.path);
+    case Protocol.WS:
+    case Protocol.WSS: {
+      return new WebSocketServer({ host: param.host, port: param.port, clientTracking: true });
     }
     default:
-      throw new TypeError(`Unknown transport method: '${url.protocol}'.`)
+      throw new TypeError(`Unknown param of kind: '${(param as ServerParamCommon|undefined)?.kind}'`)
   }
 }
 
 const server = {
   ws: tryUntil((port) => new Promise<readonly [number,WSServer]>((ok,error) => {
-    const server = getServer(`ws://127.0.0.1:${port}`);
+    const server = getServer({ kind: Protocol.WS, host: "127.0.0.1", port });
     server.once("listening", () => ok(Object.freeze([port,server] as const)));
     server.once("error", (cause) => error(cause));
   }),6463,6472),
   ipc: tryUntil((id) => new Promise<readonly [number,IPCServer]>((ok,error) => {
-    const server = getServer(`ipc://${resolve(socketPath,`discord-ipc-${id}`)}`);
+    const server = getServer({ kind: Protocol.IPC, path: resolve(socketPath,`discord-ipc-${id}`) });
     //let isClosed = false;
     server.once("listening", () => ok(Object.freeze([id,server])));
     server.once("error", (cause) => error(cause));
@@ -219,8 +196,9 @@ function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:uuid,data:Bu
         let body:string|object|Buffer;
         if(isValidUTF8(bodyRaw)) {
           body = bodyRaw.toString();
-          if(isJSON(body))
+          try {
             body = JSON.parse(body);
+          } catch {}
         } else {
           body = bodyRaw;
         }
@@ -238,10 +216,11 @@ function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:uuid,data:Bu
           Array.isArray(data) ? data.every(buf => buf instanceof Buffer) ? Buffer.concat(data) : data as unknown[] : Buffer.from(data)
         ).toString();
 
-      if(typeof parsedData === "string" && isJSON(parsedData))
+      if(typeof parsedData === "string") try {
         dumpReqMsg(protocol,receiver,JSON.parse(parsedData),id);
-      else
+      } catch {} else {
         dumpReqMsg(protocol,receiver,parsedData,id);
+      }
 
       return parsedData;
   }
