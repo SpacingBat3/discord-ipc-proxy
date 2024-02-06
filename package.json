@@ -3,14 +3,15 @@
   "version": "1.0.0-rc2",
   "description": "A tool to analyze communication within Discord's IPC / WebSocket.",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "tsc && node .",
-    "build": "tsc",
-    "build-bin": "make"
+    "start": "tsc -b tsconfig.main.json && node .",
+    "build": "tsc -b tsconfig.main.json",
+    "build-bin": "make",
+    "bundle": "tsc -b && rollup --config rollup.config.mjs"
   },
   "bin": {
-    "discord-ipc-proxy": "dist/index.js"
+    "discord-ipc-proxy": "bin/discord-ipc-proxy"
   },
   "keywords": [
     "discord",

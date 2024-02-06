@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { createServer, createConnection, type Server as IPCServer, type Socket } from "node:net";

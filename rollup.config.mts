@@ -3,10 +3,14 @@ import cjs from '@rollup/plugin-commonjs';
 import type { RollupOptions } from 'rollup'
 
 export default {
-  input: 'dist/index.js',
+  input: 'dist/main.js',
   output: {
     file: 'dist/bundle.js',
-    format: 'cjs'
+    format: 'cjs',
+    compact: true
   },
-  plugins: [cjs.default(), res.default()],
+  plugins: [
+    (cjs as unknown as typeof cjs.default)(),
+    (res as unknown as typeof res.default)()
+  ],
 } satisfies RollupOptions;

@@ -20,6 +20,9 @@ BINEXT =
 # Path to Node.js
 NODEPATH := $(shell $(NODE) -e "console.log(process.execPath)")
 
+_CMSG=\033[92m
+_CRST=\033[0m
+
 ifeq ($(OS),Windows_NT)
 	SIGRM = signtool remove /s
 	BINEXT = .exe
@@ -35,27 +38,31 @@ endif
 all: build
 
 clean:
-	rm bin/bin/discord-ipc-proxy$(BINEXT) cache/sea.bin dist/bundle.js dist/index.js
-	rmdir bin
+	@echo -e "🧼️ $(_CMSG)[0/1] Cleaning up workdir$(_CRST)"
+	-@rm discord-ipc-proxy$(BINEXT) \
+		cache/sea.bin cache/tsc-build.json dist/bundle.js \
+		cache/rollup.config.d.mts rollup.config.mjs 2>/dev/null || true
+	-@rmdir --ignore-fail-on-non-empty cache
+	@echo -e "✨️ $(_CMSG)[1/1] Cleanup done!$(_CRST)"
 
-build: bin/discord-ipc-proxy$(BINEXT)
+build: discord-ipc-proxy$(BINEXT)
 
-dist/index.js:
-	@echo Compiling package sources...
-	@$(TSC)
+dist/main.js rollup.config.mjs: src/main.ts rollup.config.mts
+	@echo -e "🔨️ $(_CMSG)[0/4] Compiling package sources...$(_CRST)"
+	@$(TSC) -b --verbose
 
-dist/bundle.js: dist/index.js
-	@echo Bundling package sources...
-	@$(ROLLUP) dist/index.js --file dist/bundle.js --format iife
+dist/bundle.js: dist/main.js rollup.config.mjs
+	@printf '📦️ $(_CMSG)[1/4] Bundling package sources...$(_CRST)'
+	@$(ROLLUP) --config rollup.config.mjs
 
 cache/sea.blob: dist/bundle.js
-	@echo Generating SEA blob...
+	@echo -e "🔧️ $(_CMSG)[2/4] Generating SEA blob...$(_CRST)"
 	@mkdir -p cache
 	@$(NODE) --experimental-sea-config sea-config.json
 
-bin/discord-ipc-proxy$(BINEXT): cache/sea.blob
-	@echo Bundling final executable...
-	@mkdir -p bin
-	@cp $(NODEPATH) bin/discord-ipc-proxy$(BINEXT)
-	@$(SIGRM) bin/discord-ipc-proxy$(BINEXT)
-	@$(POSTJECT) bin/discord-ipc-proxy$(BINEXT) NODE_SEA_BLOB cache/sea.blob $(POSTJECTARGS)
+discord-ipc-proxy$(BINEXT): cache/sea.blob
+	@echo -e "💉 $(_CMSG)[3/4] Bundling final executable...$(_CRST)"
+	@cp $(NODEPATH) discord-ipc-proxy$(BINEXT)
+	@$(SIGRM) discord-ipc-proxy$(BINEXT)
+	@$(POSTJECT) discord-ipc-proxy$(BINEXT) NODE_SEA_BLOB cache/sea.blob $(POSTJECTARGS)
+	@echo -e "🚀️ $(_CMSG)[4/4] Built 'discord-ipc-proxy$(BINEXT)'."
