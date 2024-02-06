@@ -79,7 +79,10 @@ interface ServerParamWS extends ServerParamCommon {
   port: number
 }
 
-const uid = process.getuid?.()??process.env["UID"]??1000;
+const uid = (() => {
+  const envUid = Number(process.env["UID"]);
+  return process.getuid?.()??(isNaN(envUid)?1000:envUid);
+})();
 
 const socketPath = process.platform === "win32" ? "\\\\pipe\\?" : process.env["XDG_RUNTIME_DIR"] ?? (
   existsSync(`/run/user/${uid}`) ? `/run/user/${uid}` : '/tmp/'
@@ -227,12 +230,6 @@ function parseData(protocol:Protocol,receiver:EvtMsg["receiver"],id:uuid,data:Bu
       return parsedData;
   }
 }
-
-// IPC message ID store (to avoid loops)
-const msgStore = new Set<string>();
-
-// Source map support
-(process as {setSourceMapsEnabled?: (stat:boolean)=>void})?.setSourceMapsEnabled?.(true)
 
 // WebSocket
 server.ws.then(([port,server]) => {
