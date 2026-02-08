@@ -8,7 +8,7 @@ client. Acts as a middleware between an application (browser, game) and Discord.
 1. Clone this repo.
 2. `npm i` to fetch all needed dependencies.
 3. `npm start` to launch proxy.
-4. Launch Discord. It shouldn't be launched **before** launching proxy.
+4. Launch Discord. It should be launched **after** launching proxy.
 
 The proxy will periodically output to its STDOUT a JSON-formatted messages about
 the communication between Discord IPC/WS servers and applications connecting to
